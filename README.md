@@ -1,7 +1,7 @@
 # OldRaids
 
 **WARNING!
-The text content of this 'README.md' and the Releases is generated and modified by AI tools. It may differ from the official stance of the OldRaids mod and could contain unclear phrasing.**
+The text content of this `README.md` and the Releases is generated and modified by AI tools. It may differ from the official stance of the OldRaids mod and could contain unclear phrasing.**
 
 
 **Targets Minecraft 1.21.4 Leaf/Paper/Spigot-compatible servers.**
