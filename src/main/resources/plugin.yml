@@ -1,11 +1,4 @@
 name: OldRaids
 version: '${project.version}'
-main: me.twostinkysocks.oldraids.OldRaids
+main: com.tendoarisu.oldraids.OldRaids
 api-version: 1.21.4
-commands:
-  oldraids:
-    usage: /<command>
-permissions:
-  oldraids.reload:
-    description: Reload the plugin
-    default: false

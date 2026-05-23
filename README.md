@@ -1,31 +1,18 @@
 # OldRaids
 
-**This fork targets Minecraft 1.21.4 servers based on Spigot/Paper/Leaf APIs.**
+**Targets Minecraft 1.21.4 Leaf/Paper/Spigot-compatible servers.**
 
-A lightweight spigot plugin that reverts raid behavior to before 1.21, allowing old raid farms to work the same as before.
+A lightweight plugin that restores old raid behavior for 1.21.4 raid farms:
 
-### Configuration
+- killing a raid captain gives Bad Omen again
+- Bad Omen can directly trigger or extend a raid in a village
+- raid waves are moved back toward the pre-1.21.3 spawn-location pattern
+- moved raid wave positions are validated with vanilla Ravager spawn-placement rules
 
-```
-# allow bStats metrics
-metrics: true
-
-# should raid captains still drop ominous bottles (on top of giving bad omen)
-raidersDropOminousBottles: false
-
-# duration of the Bad Omen effect given by raid captains, in ticks
-badOmenDurationTicks: 120000
-
-# make Bad Omen trigger raids directly when the player is in a village
-restoreBadOmenRaidTrigger: true
-
-# move raid waves back to the pre-1.21.3 spawn-location behavior
-restoreOldRaidSpawnLocations: true
-```
-
-### Commands
+### Build
 
 ```
-/oldraids reload
-  - Reload the plugin configuration
+mvn -DskipTests package
 ```
+
+The compiled jar is written to `target/oldraids-1.21.4-1.2.jar`.
