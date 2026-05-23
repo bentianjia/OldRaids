@@ -10,7 +10,11 @@ import org.bukkit.Raid;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
-import org.bukkit.command.*;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.command.ConsoleCommandSender;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Raider;
@@ -24,15 +28,21 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
 import java.io.File;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.logging.Level;
 
 
 public final class OldRaids extends JavaPlugin implements Listener, CommandExecutor, TabCompleter {
     private static final int DEFAULT_BAD_OMEN_DURATION_TICKS = 120000;
     private static final int MAX_BAD_OMEN_AMPLIFIER = 4;
     private static final int RAID_SPAWN_TRIES = 20;
+
+    private boolean warnedNmsBridge;
 
     @Override
     public void onEnable() {
@@ -44,6 +54,7 @@ public final class OldRaids extends JavaPlugin implements Listener, CommandExecu
         getServer().getPluginManager().registerEvents(this, this);
         getCommand("oldraids").setExecutor(this);
         getCommand("oldraids").setTabCompleter(this);
+        getServer().getScheduler().runTaskTimer(this, this::triggerBadOmenRaids, 1L, 1L);
     }
     
     public void load() {
@@ -79,6 +90,7 @@ public final class OldRaids extends JavaPlugin implements Listener, CommandExecu
             PotionEffect newEffect = new PotionEffect(PotionEffectType.BAD_OMEN, duration, i, false, false, true);
             if(Boolean.FALSE.equals(damaged.getWorld().getGameRuleValue(GameRule.DISABLE_RAIDS))) {
                 damager.addPotionEffect(newEffect);
+                triggerBadOmenRaid(damager);
             }
 
             if(!getConfig().getBoolean("raidersDropOminousBottles")) e.getDrops().removeIf(item -> item.getType() == Material.OMINOUS_BOTTLE);
@@ -112,8 +124,8 @@ public final class OldRaids extends JavaPlugin implements Listener, CommandExecu
             int xOffset = (index % 3) - 1;
             int zOffset = ((index / 3) % 3) - 1;
             Location target = findSurfaceSpawnLocation(spawn.getWorld(), spawn.getBlockX() + xOffset, spawn.getBlockZ() + zOffset);
-            if(target == null) {
-                target = spawn.clone().add(xOffset, 0, zOffset);
+            if(target == null || !isOriginalRaidSpawnLocation(target, spawn, 2)) {
+                target = spawn;
             }
             target.setYaw(raider.getLocation().getYaw());
             target.setPitch(raider.getLocation().getPitch());
@@ -144,8 +156,7 @@ public final class OldRaids extends JavaPlugin implements Listener, CommandExecu
             Location target = findSurfaceSpawnLocation(world, x, z);
             if(target == null) continue;
 
-            boolean outsideApproximateVillage = target.distanceSquared(center) > 32.0D * 32.0D;
-            if((outsideApproximateVillage || proximity >= 2) && isRaidSpawnLocation(target)) {
+            if(isOriginalRaidSpawnLocation(target, center, proximity)) {
                 return target;
             }
         }
@@ -156,19 +167,82 @@ public final class OldRaids extends JavaPlugin implements Listener, CommandExecu
     private Location findSurfaceSpawnLocation(World world, int x, int z) {
         if(world == null || !world.isChunkLoaded(x >> 4, z >> 4)) return null;
 
+        Integer vanillaY = NmsBridge.getWorldSurfaceY(world, x, z);
+        if(vanillaY != null) {
+            return new Location(world, x + 0.5D, vanillaY, z + 0.5D);
+        }
+
         Block surface = world.getHighestBlockAt(x, z, HeightMap.WORLD_SURFACE);
-        Block feet = surface.isPassable() ? surface : surface.getRelative(BlockFace.UP);
+        Block feet = surface.isPassable() && surface.getType() != Material.SNOW ? surface : surface.getRelative(BlockFace.UP);
         return feet.getLocation().add(0.5D, 0.0D, 0.5D);
     }
 
-    private boolean isRaidSpawnLocation(Location location) {
+    private boolean isOriginalRaidSpawnLocation(Location location, Location raidCenter, int proximity) {
+        try {
+            return NmsBridge.isOriginalRaidSpawnLocation(location, proximity);
+        } catch(ReflectiveOperationException ex) {
+            warnNmsBridge(ex);
+            return isFallbackRaidSpawnLocation(location, raidCenter, proximity);
+        }
+    }
+
+    private boolean isFallbackRaidSpawnLocation(Location location, Location raidCenter, int proximity) {
+        boolean outsideApproximateVillage = location.distanceSquared(raidCenter) > 32.0D * 32.0D;
+        if(!outsideApproximateVillage && proximity < 2) return false;
+
         Block feet = location.getBlock();
         Block head = feet.getRelative(BlockFace.UP);
         Block ground = feet.getRelative(BlockFace.DOWN);
 
         boolean hasRoom = feet.isPassable() && head.isPassable();
-        boolean hasGround = ground.getType().isSolid() || ground.getType() == Material.SNOW;
-        return hasRoom && hasGround;
+        boolean hasFullGround = ground.getType().isOccluding() && !ground.isPassable();
+        return hasRoom && (hasFullGround || isSnowSpawnException(location));
+    }
+
+    private boolean isSnowSpawnException(Location location) {
+        Block feet = location.getBlock();
+        Block ground = feet.getRelative(BlockFace.DOWN);
+        return ground.getType() == Material.SNOW && feet.isEmpty();
+    }
+
+    private void triggerBadOmenRaids() {
+        if(!getConfig().getBoolean("restoreBadOmenRaidTrigger", true)) return;
+
+        for(Player player : getServer().getOnlinePlayers()) {
+            triggerBadOmenRaid(player);
+        }
+    }
+
+    private boolean triggerBadOmenRaid(Player player) {
+        PotionEffect badOmen = player.getPotionEffect(PotionEffectType.BAD_OMEN);
+        if(badOmen == null || Boolean.TRUE.equals(player.getWorld().getGameRuleValue(GameRule.DISABLE_RAIDS))) {
+            return false;
+        }
+
+        try {
+            if(!NmsBridge.isPlayerInVillage(player)) return false;
+
+            player.removePotionEffect(PotionEffectType.RAID_OMEN);
+            player.addPotionEffect(new PotionEffect(PotionEffectType.RAID_OMEN, 1, badOmen.getAmplifier(), false, false, true));
+            Object raid = NmsBridge.createOrExtendRaid(player);
+            player.removePotionEffect(PotionEffectType.RAID_OMEN);
+
+            if(raid != null) {
+                player.removePotionEffect(PotionEffectType.BAD_OMEN);
+                return true;
+            }
+        } catch(ReflectiveOperationException ex) {
+            warnNmsBridge(ex);
+        }
+
+        return false;
+    }
+
+    private void warnNmsBridge(Exception ex) {
+        if(warnedNmsBridge) return;
+
+        warnedNmsBridge = true;
+        getLogger().log(Level.WARNING, "Could not access vanilla raid internals; falling back to API-only behavior.", ex);
     }
 
     private int clamp(int value, int min, int max) {
@@ -198,5 +272,160 @@ public final class OldRaids extends JavaPlugin implements Listener, CommandExecu
             return List.of("reload");
         }
         return List.of();
+    }
+
+    private static final class NmsBridge {
+        private static final Class<?> BLOCK_POS_CLASS = findClass("net.minecraft.core.BlockPos");
+        private static final Class<?> ENTITY_TYPE_CLASS = findClass("net.minecraft.world.entity.EntityType");
+        private static final Class<?> LEVEL_READER_CLASS = findClass("net.minecraft.world.level.LevelReader");
+        private static final Class<?> SERVER_PLAYER_CLASS = findClass("net.minecraft.server.level.ServerPlayer");
+        private static final Class<?> HEIGHTMAP_TYPES_CLASS = findClass("net.minecraft.world.level.levelgen.Heightmap$Types");
+        private static final Constructor<?> BLOCK_POS_CONSTRUCTOR = findConstructor(BLOCK_POS_CLASS);
+        private static final Object RAVAGER = findStaticField(ENTITY_TYPE_CLASS, "RAVAGER");
+        private static final Object WORLD_SURFACE = findStaticField(HEIGHTMAP_TYPES_CLASS, "WORLD_SURFACE");
+        private static final Object RAVAGER_SPAWN_PLACEMENT = findRavagerSpawnPlacement();
+
+        private static boolean isPlayerInVillage(Player player) throws ReflectiveOperationException {
+            Object serverPlayer = getHandle(player);
+            Object serverLevel = invoke(serverPlayer, "level");
+            Object blockPos = invoke(serverPlayer, "blockPosition");
+            return (boolean) invoke(serverLevel, "isVillage", new Class<?>[]{BLOCK_POS_CLASS}, blockPos);
+        }
+
+        private static Object createOrExtendRaid(Player player) throws ReflectiveOperationException {
+            Object serverPlayer = getHandle(player);
+            Object serverLevel = invoke(serverPlayer, "level");
+            Object raids = invoke(serverLevel, "getRaids");
+            Object blockPos = invoke(serverPlayer, "blockPosition");
+            return invoke(raids, "createOrExtendRaid", new Class<?>[]{SERVER_PLAYER_CLASS, BLOCK_POS_CLASS}, serverPlayer, blockPos);
+        }
+
+        private static boolean isOriginalRaidSpawnLocation(Location location, int proximity) throws ReflectiveOperationException {
+            if(isVillage(location) && proximity < 2) return false;
+            if(!hasChunksAt(location, 10)) return false;
+            if(!isPositionEntityTicking(location)) return false;
+            return isRavagerSpawnPositionOk(location) || isSnowSpawnExceptionVanilla(location);
+        }
+
+        private static Integer getWorldSurfaceY(World world, int x, int z) {
+            try {
+                Object serverLevel = getHandle(world);
+                return (Integer) invoke(serverLevel, "getHeight", new Class<?>[]{HEIGHTMAP_TYPES_CLASS, int.class, int.class}, WORLD_SURFACE, x, z);
+            } catch(ReflectiveOperationException ex) {
+                return null;
+            }
+        }
+
+        private static boolean isVillage(Location location) throws ReflectiveOperationException {
+            Object serverLevel = getHandle(location.getWorld());
+            Object blockPos = blockPos(location);
+            return (boolean) invoke(serverLevel, "isVillage", new Class<?>[]{BLOCK_POS_CLASS}, blockPos);
+        }
+
+        private static boolean hasChunksAt(Location location, int offset) throws ReflectiveOperationException {
+            Object serverLevel = getHandle(location.getWorld());
+            int x = location.getBlockX();
+            int z = location.getBlockZ();
+            return (boolean) invoke(serverLevel, "hasChunksAt", new Class<?>[]{int.class, int.class, int.class, int.class}, x - offset, z - offset, x + offset, z + offset);
+        }
+
+        private static boolean isPositionEntityTicking(Location location) throws ReflectiveOperationException {
+            Object serverLevel = getHandle(location.getWorld());
+            Object blockPos = blockPos(location);
+            return (boolean) invoke(serverLevel, "isPositionEntityTicking", new Class<?>[]{BLOCK_POS_CLASS}, blockPos);
+        }
+
+        private static boolean isRavagerSpawnPositionOk(Location location) throws ReflectiveOperationException {
+            if(RAVAGER_SPAWN_PLACEMENT == null || RAVAGER == null) {
+                throw new ReflectiveOperationException("Ravager spawn placement is unavailable");
+            }
+
+            Object serverLevel = getHandle(location.getWorld());
+            Object blockPos = blockPos(location);
+            return (boolean) invoke(RAVAGER_SPAWN_PLACEMENT, "isSpawnPositionOk", new Class<?>[]{LEVEL_READER_CLASS, BLOCK_POS_CLASS, ENTITY_TYPE_CLASS}, serverLevel, blockPos, RAVAGER);
+        }
+
+        private static boolean isSnowSpawnExceptionVanilla(Location location) {
+            Block feet = location.getBlock();
+            Block ground = feet.getRelative(BlockFace.DOWN);
+            return ground.getType() == Material.SNOW && feet.isEmpty();
+        }
+
+        private static Object blockPos(Location location) throws ReflectiveOperationException {
+            return blockPos(location.getBlockX(), location.getBlockY(), location.getBlockZ());
+        }
+
+        private static Object blockPos(int x, int y, int z) throws ReflectiveOperationException {
+            if(BLOCK_POS_CONSTRUCTOR == null) {
+                throw new ReflectiveOperationException("BlockPos constructor is unavailable");
+            }
+            return BLOCK_POS_CONSTRUCTOR.newInstance(x, y, z);
+        }
+
+        private static Object getHandle(Object object) throws ReflectiveOperationException {
+            if(object == null) {
+                throw new ReflectiveOperationException("Cannot get handle for null object");
+            }
+            return invoke(object, "getHandle");
+        }
+
+        private static Object invoke(Object target, String name, Object... args) throws ReflectiveOperationException {
+            Class<?>[] parameterTypes = new Class<?>[args.length];
+            for(int i = 0; i < args.length; i++) {
+                parameterTypes[i] = args[i].getClass();
+            }
+            return invoke(target, name, parameterTypes, args);
+        }
+
+        private static Object invoke(Object target, String name, Class<?>[] parameterTypes, Object... args) throws ReflectiveOperationException {
+            if(target == null) {
+                throw new ReflectiveOperationException("Cannot invoke " + name + " on null target");
+            }
+            for(Class<?> parameterType : parameterTypes) {
+                if(parameterType == null) {
+                    throw new ReflectiveOperationException("Missing parameter type for " + name);
+                }
+            }
+            Method method = target.getClass().getMethod(name, parameterTypes);
+            return method.invoke(target, args);
+        }
+
+        private static Class<?> findClass(String name) {
+            try {
+                return Class.forName(name);
+            } catch(ClassNotFoundException ex) {
+                return null;
+            }
+        }
+
+        private static Constructor<?> findConstructor(Class<?> type) {
+            if(type == null) return null;
+            try {
+                return type.getConstructor(int.class, int.class, int.class);
+            } catch(NoSuchMethodException ex) {
+                return null;
+            }
+        }
+
+        private static Object findStaticField(Class<?> type, String name) {
+            if(type == null) return null;
+            try {
+                Field field = type.getField(name);
+                return field.get(null);
+            } catch(ReflectiveOperationException ex) {
+                return null;
+            }
+        }
+
+        private static Object findRavagerSpawnPlacement() {
+            Class<?> spawnPlacementsClass = findClass("net.minecraft.world.entity.SpawnPlacements");
+            if(spawnPlacementsClass == null || ENTITY_TYPE_CLASS == null || RAVAGER == null) return null;
+            try {
+                Method method = spawnPlacementsClass.getMethod("getPlacementType", ENTITY_TYPE_CLASS);
+                return method.invoke(null, RAVAGER);
+            } catch(ReflectiveOperationException ex) {
+                return null;
+            }
+        }
     }
 }

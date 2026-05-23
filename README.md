@@ -1,8 +1,6 @@
 # OldRaids
 
-**This fork targets Minecraft/Spigot 1.21.4.**
-
-**In 1.21.10 Leaves can be loaded normally, but not tested.**
+**This fork targets Minecraft 1.21.4 servers based on Spigot/Paper/Leaf APIs.**
 
 A lightweight spigot plugin that reverts raid behavior to before 1.21, allowing old raid farms to work the same as before.
 
@@ -17,6 +15,9 @@ raidersDropOminousBottles: false
 
 # duration of the Bad Omen effect given by raid captains, in ticks
 badOmenDurationTicks: 120000
+
+# make Bad Omen trigger raids directly when the player is in a village
+restoreBadOmenRaidTrigger: true
 
 # move raid waves back to the pre-1.21.3 spawn-location behavior
 restoreOldRaidSpawnLocations: true

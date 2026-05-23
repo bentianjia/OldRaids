@@ -6,7 +6,7 @@
 
     <groupId>me.twostinkysocks</groupId>
     <artifactId>oldraids</artifactId>
-    <version>1.21.4-1.0</version>
+    <version>1.21.4-1.1</version>
     <packaging>jar</packaging>
 
     <name>OldRaids</name>
