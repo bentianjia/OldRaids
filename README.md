@@ -1,7 +1,7 @@
 # OldRaids
 
 **This fork targets Minecraft/Spigot 1.21.4.**
-**In 1.21.10Leaves can be loaded normally, but not tested. **
+**In 1.21.10 Leaves can be loaded normally, but not tested.**
 
 A lightweight spigot plugin that reverts raid behavior to before 1.21, allowing old raid farms to work the same as before.
 
