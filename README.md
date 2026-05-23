@@ -25,6 +25,7 @@ The compiled jar is written to `target/oldraids-1.21.4-1.2.jar`.
 
 # OldRaids 
 (简体中文)
+
 **警告！
 此 `README.md` 和 Releases 的文本内容由 AI 工具生成和修改，可能与 OldRaids 模组的官方立场有所不同，且部分表述可能不够清晰。**
 
