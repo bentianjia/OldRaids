@@ -1,2 +1,4 @@
 metrics: true
 raidersDropOminousBottles: false
+badOmenDurationTicks: 120000
+restoreOldRaidSpawnLocations: true

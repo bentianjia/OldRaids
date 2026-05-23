@@ -1,7 +1,7 @@
 name: OldRaids
 version: '${project.version}'
 main: me.twostinkysocks.oldraids.OldRaids
-api-version: 1.21
+api-version: 1.21.4
 commands:
   oldraids:
     usage: /<command>

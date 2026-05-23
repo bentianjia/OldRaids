@@ -1,6 +1,6 @@
 # OldRaids
 
-**Important: Mojang changed how raid spawn locations are calculated in 1.21.3+, breaking this plugin and most raid farm designs. This plugin will not work on these versions!**
+**This fork targets Minecraft/Spigot 1.21.4.**
 
 A lightweight spigot plugin that reverts raid behavior to before 1.21, allowing old raid farms to work the same as before.
 
@@ -12,6 +12,12 @@ metrics: true
 
 # should raid captains still drop ominous bottles (on top of giving bad omen)
 raidersDropOminousBottles: false
+
+# duration of the Bad Omen effect given by raid captains, in ticks
+badOmenDurationTicks: 120000
+
+# move raid waves back to the pre-1.21.3 spawn-location behavior
+restoreOldRaidSpawnLocations: true
 ```
 
 ### Commands
