@@ -13,7 +13,7 @@ A lightweight Spigot plugin for 1.21.4 that reverts raid behavior to before 1.21
 - raid waves are moved back toward the pre-1.21.3 spawn-location pattern
 - moved raid wave positions are validated with vanilla Ravager spawn-placement rules
 
-If you want to try or test it, feel free to join the server: `trap.786913.xyz`
+If you want to try or test it, you can to join the server: `trap.786913.xyz`
 
 ### Build
 
@@ -44,7 +44,7 @@ The compiled jar is written to `target/oldraids-1.21.4-1.2.jar`.
 - 袭击波次的生成位置恢复到 1.21.3 之前的生成模式
 - 调整后的袭击波次生成位置会通过原版劫掠兽的生成规则进行有效性验证
 
-如果你想尝试/测试，可以来 `trap.786913.xyz` 这个服务器。
+如果你想尝试/测试，可以加入 `trap.786913.xyz` 这个服务器。
 
 ### 构建
 
