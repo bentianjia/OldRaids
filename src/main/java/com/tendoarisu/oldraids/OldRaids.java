@@ -42,10 +42,12 @@ public final class OldRaids extends JavaPlugin implements Listener {
    private static final int MAX_BAD_OMEN_AMPLIFIER = 4;
    private static final int RAID_SPAWN_TRIES = 20;
    private static final String KEEP_OMINOUS_BOTTLE_CONFIG = "keep-ominous-bottle";
+   private static final String USE_VANILLA_RAID_MECHANICS_CONFIG = "use-vanilla-raid-mechanics";
    private static final String ADMIN_PERMISSION = "oldraids.admin";
 
    private boolean warnedNmsBridge;
    private boolean keepOminousBottle;
+   private boolean useVanillaRaidMechanics;
 
    public void onEnable() {
       this.saveDefaultConfig();
@@ -77,21 +79,22 @@ public final class OldRaids extends JavaPlugin implements Listener {
          this.sendConfigStatus(sender);
          return true;
       }
-      if (args[0].equalsIgnoreCase("set") && args.length == 3 && args[1].equalsIgnoreCase(KEEP_OMINOUS_BOTTLE_CONFIG)) {
+      if (args[0].equalsIgnoreCase("set") && args.length == 3 && this.isBooleanConfigKey(args[1])) {
          Boolean value = this.parseBoolean(args[2]);
          if (value == null) {
             sender.sendMessage("[OldRaids] Value must be true or false.");
             return true;
          }
 
-         this.getConfig().set(KEEP_OMINOUS_BOTTLE_CONFIG, value);
+         String key = this.normalizeBooleanConfigKey(args[1]);
+         this.getConfig().set(key, value);
          this.saveConfig();
          this.reloadSettings();
-         sender.sendMessage("[OldRaids] Saved " + KEEP_OMINOUS_BOTTLE_CONFIG + "=" + value + ".");
+         sender.sendMessage("[OldRaids] Saved " + key + "=" + value + ".");
          return true;
       }
 
-      sender.sendMessage("[OldRaids] Usage: /oldraids <status|reload|set keep-ominous-bottle <true|false>>");
+      sender.sendMessage("[OldRaids] Usage: /oldraids <status|reload|set <key> <true|false>>");
       return true;
    }
 
@@ -104,9 +107,9 @@ public final class OldRaids extends JavaPlugin implements Listener {
          return this.matching(args[0], "status", "reload", "set");
       }
       if (args.length == 2 && args[0].equalsIgnoreCase("set")) {
-         return this.matching(args[1], KEEP_OMINOUS_BOTTLE_CONFIG);
+         return this.matching(args[1], KEEP_OMINOUS_BOTTLE_CONFIG, USE_VANILLA_RAID_MECHANICS_CONFIG);
       }
-      if (args.length == 3 && args[0].equalsIgnoreCase("set") && args[1].equalsIgnoreCase(KEEP_OMINOUS_BOTTLE_CONFIG)) {
+      if (args.length == 3 && args[0].equalsIgnoreCase("set") && this.isBooleanConfigKey(args[1])) {
          return this.matching(args[2], "true", "false");
       }
       return List.of();
@@ -114,6 +117,10 @@ public final class OldRaids extends JavaPlugin implements Listener {
 
    @EventHandler
    public void onDeath(EntityDeathEvent e) {
+      if (this.useVanillaRaidMechanics) {
+         return;
+      }
+
       Player damager = e.getEntity().getKiller();
       LivingEntity damaged = e.getEntity();
       if (damager != null) {
@@ -143,6 +150,10 @@ public final class OldRaids extends JavaPlugin implements Listener {
 
    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
    public void onMove(PlayerMoveEvent e) {
+      if (this.useVanillaRaidMechanics) {
+         return;
+      }
+
       if (this.hasChangedBlock(e.getFrom(), e.getTo())) {
          this.triggerRaidFromBadOmen(e.getPlayer());
       }
@@ -150,6 +161,10 @@ public final class OldRaids extends JavaPlugin implements Listener {
 
    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
    public void onPotion(EntityPotionEffectEvent e) {
+      if (this.useVanillaRaidMechanics) {
+         return;
+      }
+
       if (e.getEntity() instanceof Player player
          && e.getNewEffect() != null
          && e.getNewEffect().getType() == PotionEffectType.RAID_OMEN
@@ -160,6 +175,10 @@ public final class OldRaids extends JavaPlugin implements Listener {
 
    @EventHandler
    public void onRaidSpawnWave(RaidSpawnWaveEvent e) {
+      if (this.useVanillaRaidMechanics) {
+         return;
+      }
+
       Location spawn = this.findOldRaidSpawnLocation(e.getRaid(), e.getWorld(), false);
       if (spawn == null) {
          return;
@@ -188,6 +207,10 @@ public final class OldRaids extends JavaPlugin implements Listener {
    }
 
    private void precalculateRaidSpawnPositions() {
+      if (this.useVanillaRaidMechanics) {
+         return;
+      }
+
       for (World world : this.getServer().getWorlds()) {
          for (Raid raid : world.getRaids()) {
             if (raid.getStatus() != Raid.RaidStatus.ONGOING || !raid.getRaiders().isEmpty() || raid.getSpawnedGroups() >= raid.getTotalGroups()) {
@@ -209,6 +232,10 @@ public final class OldRaids extends JavaPlugin implements Listener {
    }
 
    private void triggerRaidFromBadOmen(Player player) {
+      if (this.useVanillaRaidMechanics) {
+         return;
+      }
+
       if (!player.isOnline() || player.isDead()) {
          return;
       }
@@ -238,6 +265,10 @@ public final class OldRaids extends JavaPlugin implements Listener {
    }
 
    private void triggerRaidFromRaidOmen(Player player) {
+      if (this.useVanillaRaidMechanics) {
+         return;
+      }
+
       if (!player.isOnline() || player.isDead() || player.getPotionEffect(PotionEffectType.RAID_OMEN) == null || !this.canTriggerRaid(player)) {
          return;
       }
@@ -387,10 +418,13 @@ public final class OldRaids extends JavaPlugin implements Listener {
 
    private void reloadSettings() {
       this.keepOminousBottle = this.getConfig().getBoolean(KEEP_OMINOUS_BOTTLE_CONFIG, false);
+      this.useVanillaRaidMechanics = this.getConfig().getBoolean(USE_VANILLA_RAID_MECHANICS_CONFIG, false);
    }
 
    private void sendConfigStatus(CommandSender sender) {
       sender.sendMessage("[OldRaids] " + KEEP_OMINOUS_BOTTLE_CONFIG + "=" + this.keepOminousBottle);
+      sender.sendMessage("[OldRaids] " + USE_VANILLA_RAID_MECHANICS_CONFIG + "=" + this.useVanillaRaidMechanics);
+      sender.sendMessage("[OldRaids] old raid mechanics are " + (this.useVanillaRaidMechanics ? "disabled" : "enabled") + ".");
    }
 
    private Boolean parseBoolean(String value) {
@@ -399,6 +433,20 @@ public final class OldRaids extends JavaPlugin implements Listener {
       }
       if (value.equalsIgnoreCase("false") || value.equalsIgnoreCase("no") || value.equalsIgnoreCase("off") || value.equals("0")) {
          return false;
+      }
+      return null;
+   }
+
+   private boolean isBooleanConfigKey(String key) {
+      return this.normalizeBooleanConfigKey(key) != null;
+   }
+
+   private String normalizeBooleanConfigKey(String key) {
+      if (key.equalsIgnoreCase(KEEP_OMINOUS_BOTTLE_CONFIG)) {
+         return KEEP_OMINOUS_BOTTLE_CONFIG;
+      }
+      if (key.equalsIgnoreCase(USE_VANILLA_RAID_MECHANICS_CONFIG)) {
+         return USE_VANILLA_RAID_MECHANICS_CONFIG;
       }
       return null;
    }

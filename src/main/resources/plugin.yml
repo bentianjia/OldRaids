@@ -5,7 +5,7 @@ api-version: 1.21.4
 commands:
   oldraids:
     description: Manage OldRaids configuration.
-    usage: /oldraids <status|reload|set keep-ominous-bottle <true|false>>
+    usage: /oldraids <status|reload|set <key> <true|false>>
     permission: oldraids.admin
 permissions:
   oldraids.admin:

@@ -1,3 +1,7 @@
 # If true, patrol captains can still drop ominous bottles.
 # Default false keeps the old Bad Omen raid flow clean.
 keep-ominous-bottle: false
+
+# If true, OldRaids stops changing raid behavior and vanilla 1.21+ mechanics run normally.
+# Use this as a temporary compatibility switch without removing the plugin.
+use-vanilla-raid-mechanics: false
