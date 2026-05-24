@@ -11,6 +11,17 @@ A lightweight Spigot plugin for 1.21.4 that reverts raid behavior to before 1.21
 - Bad Omen can directly trigger or extend a raid in a village
 - raid waves are moved back toward the pre-1.21.3 spawn-location pattern
 - moved raid wave positions are validated with vanilla Ravager spawn-placement rules
+- configurable ominous bottle drops with a persistent `config.yml`
+
+### Configuration
+
+The plugin creates `plugins/OldRaids/config.yml` on first start.
+
+```yaml
+keep-ominous-bottle: false
+```
+
+Use `/oldraids set keep-ominous-bottle true` to keep ominous bottle drops, or `/oldraids reload` after editing the file manually.
 
 ### Build
 
@@ -18,7 +29,7 @@ A lightweight Spigot plugin for 1.21.4 that reverts raid behavior to before 1.21
 mvn -DskipTests package
 ```
 
-The compiled jar is written to `target/oldraids-1.21.4-1.2.jar`.
+The compiled jar is written to `target/oldraids-1.21.4-1.3.jar`.
 
 ### Special Thanks
 
@@ -39,6 +50,17 @@ The compiled jar is written to `target/oldraids-1.21.4-1.2.jar`.
 - 不祥之兆可以直接在村庄中触发或延长袭击
 - 袭击波次的生成位置恢复到 1.21.3 之前的生成模式
 - 调整后的袭击波次生成位置会通过原版劫掠兽的生成规则进行有效性验证
+- 可通过持久化 `config.yml` 配置是否保留不祥之瓶掉落
+
+### 配置
+
+插件首次启动时会生成 `plugins/OldRaids/config.yml`。
+
+```yaml
+keep-ominous-bottle: false
+```
+
+如果要保留不祥之瓶掉落，可以使用 `/oldraids set keep-ominous-bottle true`；手动编辑配置后可使用 `/oldraids reload` 重新加载。
 
 ### 构建
 
@@ -46,7 +68,7 @@ The compiled jar is written to `target/oldraids-1.21.4-1.2.jar`.
 mvn -DskipTests package
 ```
 
-编译完成的 jar 包将输出至 `target/oldraids-1.21.4-1.2.jar`。
+编译完成的 jar 包将输出至 `target/oldraids-1.21.4-1.3.jar`。
 
 ### 特别鸣谢
 

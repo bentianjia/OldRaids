@@ -2,3 +2,12 @@ name: OldRaids
 version: '${project.version}'
 main: com.tendoarisu.oldraids.OldRaids
 api-version: 1.21.4
+commands:
+  oldraids:
+    description: Manage OldRaids configuration.
+    usage: /oldraids <status|reload|set keep-ominous-bottle <true|false>>
+    permission: oldraids.admin
+permissions:
+  oldraids.admin:
+    description: Allows changing OldRaids configuration.
+    default: op

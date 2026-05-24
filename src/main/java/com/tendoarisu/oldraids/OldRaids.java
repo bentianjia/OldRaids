@@ -9,6 +9,8 @@ import org.bukkit.Raid;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Raider;
@@ -29,6 +31,8 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
 
@@ -37,11 +41,75 @@ public final class OldRaids extends JavaPlugin implements Listener {
    private static final int DEFAULT_BAD_OMEN_DURATION_TICKS = 120000;
    private static final int MAX_BAD_OMEN_AMPLIFIER = 4;
    private static final int RAID_SPAWN_TRIES = 20;
+   private static final String KEEP_OMINOUS_BOTTLE_CONFIG = "keep-ominous-bottle";
+   private static final String ADMIN_PERMISSION = "oldraids.admin";
 
    private boolean warnedNmsBridge;
+   private boolean keepOminousBottle;
 
    public void onEnable() {
+      this.saveDefaultConfig();
+      this.getConfig().options().copyDefaults(true);
+      this.saveConfig();
+      this.reloadSettings();
       this.getServer().getPluginManager().registerEvents(this, this);
+      this.getServer().getScheduler().runTaskTimer(this, this::precalculateRaidSpawnPositions, 1L, 1L);
+   }
+
+   @Override
+   public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+      if (!command.getName().equalsIgnoreCase("oldraids")) {
+         return false;
+      }
+      if (!sender.hasPermission(ADMIN_PERMISSION)) {
+         sender.sendMessage("[OldRaids] You do not have permission to use this command.");
+         return true;
+      }
+
+      if (args.length == 0 || args[0].equalsIgnoreCase("status")) {
+         this.sendConfigStatus(sender);
+         return true;
+      }
+      if (args[0].equalsIgnoreCase("reload")) {
+         this.reloadConfig();
+         this.reloadSettings();
+         sender.sendMessage("[OldRaids] Config reloaded.");
+         this.sendConfigStatus(sender);
+         return true;
+      }
+      if (args[0].equalsIgnoreCase("set") && args.length == 3 && args[1].equalsIgnoreCase(KEEP_OMINOUS_BOTTLE_CONFIG)) {
+         Boolean value = this.parseBoolean(args[2]);
+         if (value == null) {
+            sender.sendMessage("[OldRaids] Value must be true or false.");
+            return true;
+         }
+
+         this.getConfig().set(KEEP_OMINOUS_BOTTLE_CONFIG, value);
+         this.saveConfig();
+         this.reloadSettings();
+         sender.sendMessage("[OldRaids] Saved " + KEEP_OMINOUS_BOTTLE_CONFIG + "=" + value + ".");
+         return true;
+      }
+
+      sender.sendMessage("[OldRaids] Usage: /oldraids <status|reload|set keep-ominous-bottle <true|false>>");
+      return true;
+   }
+
+   @Override
+   public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+      if (!command.getName().equalsIgnoreCase("oldraids") || !sender.hasPermission(ADMIN_PERMISSION)) {
+         return List.of();
+      }
+      if (args.length == 1) {
+         return this.matching(args[0], "status", "reload", "set");
+      }
+      if (args.length == 2 && args[0].equalsIgnoreCase("set")) {
+         return this.matching(args[1], KEEP_OMINOUS_BOTTLE_CONFIG);
+      }
+      if (args.length == 3 && args[0].equalsIgnoreCase("set") && args[1].equalsIgnoreCase(KEEP_OMINOUS_BOTTLE_CONFIG)) {
+         return this.matching(args[2], "true", "false");
+      }
+      return List.of();
    }
 
    @EventHandler
@@ -65,7 +133,9 @@ public final class OldRaids extends JavaPlugin implements Listener {
                   this.getServer().getScheduler().runTask(this, () -> this.triggerRaidFromBadOmen(damager));
                }
 
-               e.getDrops().removeIf(item -> item.getType() == Material.OMINOUS_BOTTLE);
+               if (!this.keepOminousBottle) {
+                  e.getDrops().removeIf(item -> item.getType() == Material.OMINOUS_BOTTLE);
+               }
             }
          }
       }
@@ -90,7 +160,7 @@ public final class OldRaids extends JavaPlugin implements Listener {
 
    @EventHandler
    public void onRaidSpawnWave(RaidSpawnWaveEvent e) {
-      Location spawn = this.findOldRaidSpawnLocation(e.getRaid(), e.getWorld());
+      Location spawn = this.findOldRaidSpawnLocation(e.getRaid(), e.getWorld(), false);
       if (spawn == null) {
          return;
       }
@@ -113,6 +183,27 @@ public final class OldRaids extends JavaPlugin implements Listener {
             target.setYaw(raider.getLocation().getYaw());
             target.setPitch(raider.getLocation().getPitch());
             raider.teleport(target);
+         }
+      }
+   }
+
+   private void precalculateRaidSpawnPositions() {
+      for (World world : this.getServer().getWorlds()) {
+         for (Raid raid : world.getRaids()) {
+            if (raid.getStatus() != Raid.RaidStatus.ONGOING || !raid.getRaiders().isEmpty() || raid.getSpawnedGroups() >= raid.getTotalGroups()) {
+               continue;
+            }
+
+            Location spawn = this.findOldRaidSpawnLocation(raid, world, true);
+            if (spawn == null) {
+               continue;
+            }
+
+            try {
+               NmsBridge.setWaveSpawnPosition(raid, spawn);
+            } catch (ReflectiveOperationException ex) {
+               this.warnNmsBridge(ex);
+            }
          }
       }
    }
@@ -160,14 +251,26 @@ public final class OldRaids extends JavaPlugin implements Listener {
       }
    }
 
-   private Location findOldRaidSpawnLocation(Raid raid, World world) {
+   private Location findOldRaidSpawnLocation(Raid raid, World world, boolean preCalculate) {
       Location center = raid.getLocation();
       if (center == null) {
          return null;
       }
 
+      if (preCalculate) {
+         int cooldownTicks = NmsBridge.getRaidCooldownTicks(raid);
+         int proximity = cooldownTicks < 100 ? 1 : 0;
+         for (int i = 0; i < 3; i++) {
+            Location spawn = this.findRandomRaidSpawnLocation(raid, world, center, proximity, 1);
+            if (spawn != null) {
+               return spawn;
+            }
+         }
+         return null;
+      }
+
       for (int proximity = 0; proximity <= 3; proximity++) {
-         Location spawn = this.findRandomRaidSpawnLocation(world, center, proximity, RAID_SPAWN_TRIES);
+         Location spawn = this.findRandomRaidSpawnLocation(raid, world, center, proximity, RAID_SPAWN_TRIES);
          if (spawn != null) {
             return spawn;
          }
@@ -176,14 +279,13 @@ public final class OldRaids extends JavaPlugin implements Listener {
       return null;
    }
 
-   private Location findRandomRaidSpawnLocation(World world, Location center, int proximity, int tries) {
-      ThreadLocalRandom random = ThreadLocalRandom.current();
+   private Location findRandomRaidSpawnLocation(Raid raid, World world, Location center, int proximity, int tries) {
       int invertedProximity = proximity == 0 ? 2 : 2 - proximity;
 
       for (int i = 0; i < tries; i++) {
-         double angle = random.nextDouble(Math.PI * 2);
-         int x = center.getBlockX() + (int)Math.floor(Math.cos(angle) * 32.0 * invertedProximity) + random.nextInt(5);
-         int z = center.getBlockZ() + (int)Math.floor(Math.sin(angle) * 32.0 * invertedProximity) + random.nextInt(5);
+         double angle = this.nextRaidRandomDouble(raid, Math.PI * 2);
+         int x = center.getBlockX() + (int)Math.floor(Math.cos(angle) * 32.0 * invertedProximity) + this.nextRaidRandomInt(raid, 5);
+         int z = center.getBlockZ() + (int)Math.floor(Math.sin(angle) * 32.0 * invertedProximity) + this.nextRaidRandomInt(raid, 5);
          Location target = this.findSurfaceSpawnLocation(world, x, z);
          if (target != null && this.isOriginalRaidSpawnLocation(target, center, proximity)) {
             return target;
@@ -191,6 +293,30 @@ public final class OldRaids extends JavaPlugin implements Listener {
       }
 
       return null;
+   }
+
+   private double nextRaidRandomDouble(Raid raid, double bound) {
+      try {
+         Float value = NmsBridge.nextRaidRandomFloat(raid);
+         if (value != null) {
+            return value * bound;
+         }
+      } catch (ReflectiveOperationException ex) {
+         this.warnNmsBridge(ex);
+      }
+      return ThreadLocalRandom.current().nextDouble(bound);
+   }
+
+   private int nextRaidRandomInt(Raid raid, int bound) {
+      try {
+         Integer value = NmsBridge.nextRaidRandomInt(raid, bound);
+         if (value != null) {
+            return value;
+         }
+      } catch (ReflectiveOperationException ex) {
+         this.warnNmsBridge(ex);
+      }
+      return ThreadLocalRandom.current().nextInt(bound);
    }
 
    private Location findSurfaceSpawnLocation(World world, int x, int z) {
@@ -259,6 +385,35 @@ public final class OldRaids extends JavaPlugin implements Listener {
       this.getLogger().log(Level.WARNING, "Could not access vanilla raid internals; falling back where possible.", ex);
    }
 
+   private void reloadSettings() {
+      this.keepOminousBottle = this.getConfig().getBoolean(KEEP_OMINOUS_BOTTLE_CONFIG, false);
+   }
+
+   private void sendConfigStatus(CommandSender sender) {
+      sender.sendMessage("[OldRaids] " + KEEP_OMINOUS_BOTTLE_CONFIG + "=" + this.keepOminousBottle);
+   }
+
+   private Boolean parseBoolean(String value) {
+      if (value.equalsIgnoreCase("true") || value.equalsIgnoreCase("yes") || value.equalsIgnoreCase("on") || value.equals("1")) {
+         return true;
+      }
+      if (value.equalsIgnoreCase("false") || value.equalsIgnoreCase("no") || value.equalsIgnoreCase("off") || value.equals("0")) {
+         return false;
+      }
+      return null;
+   }
+
+   private List<String> matching(String input, String... options) {
+      String lower = input.toLowerCase(Locale.ROOT);
+      List<String> matches = new ArrayList<>();
+      for (String option : options) {
+         if (option.toLowerCase(Locale.ROOT).startsWith(lower)) {
+            matches.add(option);
+         }
+      }
+      return matches;
+   }
+
    private int clamp(int value, int min, int max) {
       return Math.max(min, Math.min(max, value));
    }
@@ -267,7 +422,11 @@ public final class OldRaids extends JavaPlugin implements Listener {
       private static final Class<?> BLOCK_POS_CLASS = findClass("net.minecraft.core.BlockPos", "net.minecraft.core.BlockPosition");
       private static final Class<?> ENTITY_TYPE_CLASS = findClass("net.minecraft.world.entity.EntityType", "net.minecraft.world.entity.EntityTypes");
       private static final Class<?> HEIGHTMAP_TYPES_CLASS = findClass("net.minecraft.world.level.levelgen.Heightmap$Types", "net.minecraft.world.level.levelgen.HeightMap$Type");
+      private static final Class<?> NMS_RAID_CLASS = findClass("net.minecraft.world.entity.raid.Raid");
       private static final Constructor<?> BLOCK_POS_CONSTRUCTOR = findConstructor(BLOCK_POS_CLASS);
+      private static final Field RAID_COOLDOWN_TICKS_FIELD = findDeclaredField(NMS_RAID_CLASS, "raidCooldownTicks");
+      private static final Field RAID_RANDOM_FIELD = findDeclaredField(NMS_RAID_CLASS, "random");
+      private static final Field WAVE_SPAWN_POS_FIELD = findDeclaredField(NMS_RAID_CLASS, "waveSpawnPos");
       private static final Object RAVAGER = findRavagerEntityType();
       private static final Object WORLD_SURFACE = findStaticFieldByNameOrText(HEIGHTMAP_TYPES_CLASS, "WORLD_SURFACE", "WORLD_SURFACE");
       private static final Object RAVAGER_SPAWN_PLACEMENT = findRavagerSpawnPlacement();
@@ -290,6 +449,44 @@ public final class OldRaids extends JavaPlugin implements Listener {
          Integer level = invokeIntOptional(raid, new String[]{"getRaidOmenLevel", "m"});
          Integer max = invokeIntOptional(raid, new String[]{"getMaxRaidOmenLevel", "l"});
          return level != null && max != null && level >= max;
+      }
+
+      private static int getRaidCooldownTicks(Raid raid) {
+         try {
+            Object handle = getHandle(raid);
+            if (RAID_COOLDOWN_TICKS_FIELD != null) {
+               return RAID_COOLDOWN_TICKS_FIELD.getInt(handle);
+            }
+         } catch (ReflectiveOperationException ignored) {
+         }
+         return 300;
+      }
+
+      private static void setWaveSpawnPosition(Raid raid, Location location) throws ReflectiveOperationException {
+         Object handle = getHandle(raid);
+         if (WAVE_SPAWN_POS_FIELD == null) {
+            throw new ReflectiveOperationException("Raid waveSpawnPos field is unavailable");
+         }
+         WAVE_SPAWN_POS_FIELD.set(handle, Optional.of(blockPos(location)));
+      }
+
+      private static Float nextRaidRandomFloat(Raid raid) throws ReflectiveOperationException {
+         Object random = raidRandom(raid);
+         Object result = invokeOptional(random, new String[]{"nextFloat", "i"});
+         return result instanceof Float ? (Float)result : null;
+      }
+
+      private static Integer nextRaidRandomInt(Raid raid, int bound) throws ReflectiveOperationException {
+         Object random = raidRandom(raid);
+         return invokeIntOptional(random, new String[]{"nextInt", "a"}, new Object[]{bound});
+      }
+
+      private static Object raidRandom(Raid raid) throws ReflectiveOperationException {
+         Object handle = getHandle(raid);
+         if (RAID_RANDOM_FIELD == null) {
+            throw new ReflectiveOperationException("Raid random field is unavailable");
+         }
+         return RAID_RANDOM_FIELD.get(handle);
       }
 
       private static Object createOrExtendRaid(Player player) throws ReflectiveOperationException {
@@ -506,6 +703,19 @@ public final class OldRaids extends JavaPlugin implements Listener {
          try {
             return type.getConstructor(int.class, int.class, int.class);
          } catch (NoSuchMethodException ex) {
+            return null;
+         }
+      }
+
+      private static Field findDeclaredField(Class<?> type, String name) {
+         if (type == null) {
+            return null;
+         }
+         try {
+            Field field = type.getDeclaredField(name);
+            field.setAccessible(true);
+            return field;
+         } catch (NoSuchFieldException ex) {
             return null;
          }
       }
