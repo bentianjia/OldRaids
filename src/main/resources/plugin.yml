@@ -1,0 +1,4 @@
+name: OldRaids
+version: '${project.version}'
+main: com.tendoarisu.oldraids.OldRaids
+api-version: 1.21.4
