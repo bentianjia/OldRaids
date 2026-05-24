@@ -1,12 +1,11 @@
 # OldRaids
-(English)
 
 **WARNING!
 The text content of this `README.md` and the Releases is generated and modified by AI tools. It may differ from the official stance of the OldRaids mod and could contain unclear phrasing.**
 
 **Targets Minecraft 1.21.4 Leaf/Paper/Spigot-compatible servers.**
 
-A lightweight plugin that restores old raid behavior for 1.21.4 raid farms:
+A lightweight Spigot plugin for 1.21.4 that reverts raid behavior to before 1.21, allowing old raid farms to work the same as before:
 
 - killing a raid captain gives Bad Omen again
 - Bad Omen can directly trigger or extend a raid in a village
@@ -21,17 +20,20 @@ mvn -DskipTests package
 
 The compiled jar is written to `target/oldraids-1.21.4-1.2.jar`.
 
+### Special Thanks
+
+- [XUANHLGG](https://github.com/XUANHLGG) for providing valuable testing opportunities and partial code changes.
+
 ---
 
-# OldRaids 
-(简体中文)
+# OldRaids (中文说明)
 
 **警告！
 此 `README.md` 和 Releases 的文本内容由 AI 工具生成和修改，可能与 OldRaids 模组的官方立场有所不同，且部分表述可能不够清晰。**
 
 **适用于 Minecraft 1.21.4 Leaf/Paper/Spigot 兼容服务端。**
 
-一个为 1.21.4 袭击农场恢复旧版袭击机制的轻量化插件：
+一个适用于 1.21.4 的轻量化 Spigot 插件，它将袭击机制恢复到 1.21 之前，让旧版袭击农场能够像以前一样正常工作：
 
 - 击杀袭击队长会再次给予“不祥之兆”效果
 - 不祥之兆可以直接在村庄中触发或延长袭击
@@ -45,3 +47,7 @@ mvn -DskipTests package
 ```
 
 编译完成的 jar 包将输出至 `target/oldraids-1.21.4-1.2.jar`。
+
+### 特别鸣谢
+
+- [XUANHLGG](https://github.com/XUANHLGG) 提供了宝贵的测试机会和部分代码更改。
