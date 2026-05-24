@@ -423,6 +423,8 @@ public final class OldRaids extends JavaPlugin implements Listener {
       private static final Class<?> ENTITY_TYPE_CLASS = findClass("net.minecraft.world.entity.EntityType", "net.minecraft.world.entity.EntityTypes");
       private static final Class<?> HEIGHTMAP_TYPES_CLASS = findClass("net.minecraft.world.level.levelgen.Heightmap$Types", "net.minecraft.world.level.levelgen.HeightMap$Type");
       private static final Class<?> NMS_RAID_CLASS = findClass("net.minecraft.world.entity.raid.Raid");
+      private static final Class<?> SPAWN_PLACEMENTS_CLASS = findClass("net.minecraft.world.entity.SpawnPlacements");
+      private static final Class<?> SPAWN_PLACEMENT_TYPE_CLASS = findClass("net.minecraft.world.entity.SpawnPlacementType");
       private static final Constructor<?> BLOCK_POS_CONSTRUCTOR = findConstructor(BLOCK_POS_CLASS);
       private static final Field RAID_COOLDOWN_TICKS_FIELD = findDeclaredField(NMS_RAID_CLASS, "raidCooldownTicks");
       private static final Field RAID_RANDOM_FIELD = findDeclaredField(NMS_RAID_CLASS, "random");
@@ -553,22 +555,34 @@ public final class OldRaids extends JavaPlugin implements Listener {
       }
 
       private static boolean isRavagerSpawnPositionOk(Location location) throws ReflectiveOperationException {
-         if (RAVAGER_SPAWN_PLACEMENT == null || RAVAGER == null) {
-            throw new ReflectiveOperationException("Ravager spawn placement is unavailable");
+         if (RAVAGER == null) {
+            throw new ReflectiveOperationException("Ravager entity type is unavailable");
          }
 
          Object serverLevel = getHandle(location.getWorld());
          Object blockPos = blockPos(location);
-         for (Method method : RAVAGER_SPAWN_PLACEMENT.getClass().getMethods()) {
-            if (method.getReturnType() == boolean.class && method.getParameterCount() == 3) {
-               Class<?>[] parameterTypes = method.getParameterTypes();
-               if (parameterTypes[0].isInstance(serverLevel)
-                  && parameterTypes[1].isInstance(blockPos)
-                  && parameterTypes[2].isInstance(RAVAGER)) {
-                  return (boolean)method.invoke(RAVAGER_SPAWN_PLACEMENT, serverLevel, blockPos, RAVAGER);
-               }
+
+         Boolean staticResult = invokeStaticBooleanOptional(
+            SPAWN_PLACEMENTS_CLASS,
+            new String[]{"isSpawnPositionOk"},
+            new Object[]{RAVAGER, serverLevel, blockPos}
+         );
+         if (staticResult != null) {
+            return staticResult;
+         }
+
+         if (RAVAGER_SPAWN_PLACEMENT != null) {
+            Boolean placementResult = invokeBooleanOnTypeOptional(
+               SPAWN_PLACEMENT_TYPE_CLASS,
+               RAVAGER_SPAWN_PLACEMENT,
+               new String[]{"isSpawnPositionOk"},
+               new Object[]{serverLevel, blockPos, RAVAGER}
+            );
+            if (placementResult != null) {
+               return placementResult;
             }
          }
+
          throw new ReflectiveOperationException("Ravager spawn placement method is unavailable");
       }
 
@@ -629,6 +643,16 @@ public final class OldRaids extends JavaPlugin implements Listener {
          return result instanceof Boolean ? (Boolean)result : null;
       }
 
+      private static Boolean invokeStaticBooleanOptional(Class<?> type, String[] names, Object[] args) throws ReflectiveOperationException {
+         Object result = invokeStaticOptional(type, names, args);
+         return result instanceof Boolean ? (Boolean)result : null;
+      }
+
+      private static Boolean invokeBooleanOnTypeOptional(Class<?> type, Object target, String[] names, Object[] args) throws ReflectiveOperationException {
+         Object result = invokeOnTypeOptional(type, target, names, args);
+         return result instanceof Boolean ? (Boolean)result : null;
+      }
+
       private static Integer invokeIntOptional(Object target, String[] names) throws ReflectiveOperationException {
          return invokeIntOptional(target, names, new Object[0]);
       }
@@ -645,6 +669,40 @@ public final class OldRaids extends JavaPlugin implements Listener {
          }
          for (String name : names) {
             Method method = findCompatibleMethod(target.getClass(), name, actualArgs);
+            if (method != null) {
+               return method.invoke(target, actualArgs);
+            }
+         }
+         return null;
+      }
+
+      private static Object invokeStaticOptional(Class<?> type, String[] names, Object... args) throws ReflectiveOperationException {
+         Object[] actualArgs = args;
+         if (args.length == 1 && args[0] instanceof Object[] nested) {
+            actualArgs = nested;
+         }
+         if (type == null) {
+            return null;
+         }
+         for (String name : names) {
+            Method method = findCompatibleMethod(type, name, actualArgs);
+            if (method != null && Modifier.isStatic(method.getModifiers())) {
+               return method.invoke(null, actualArgs);
+            }
+         }
+         return null;
+      }
+
+      private static Object invokeOnTypeOptional(Class<?> type, Object target, String[] names, Object... args) throws ReflectiveOperationException {
+         Object[] actualArgs = args;
+         if (args.length == 1 && args[0] instanceof Object[] nested) {
+            actualArgs = nested;
+         }
+         if (type == null || target == null) {
+            return null;
+         }
+         for (String name : names) {
+            Method method = findCompatibleMethod(type, name, actualArgs);
             if (method != null) {
                return method.invoke(target, actualArgs);
             }
@@ -778,11 +836,17 @@ public final class OldRaids extends JavaPlugin implements Listener {
       }
 
       private static Object findRavagerSpawnPlacement() {
-         Class<?> spawnPlacementsClass = findClass("net.minecraft.world.entity.SpawnPlacements");
-         if (spawnPlacementsClass == null || RAVAGER == null) {
+         if (SPAWN_PLACEMENTS_CLASS == null || RAVAGER == null) {
             return null;
          }
-         for (Method method : spawnPlacementsClass.getMethods()) {
+         try {
+            Object named = invokeStaticOptional(SPAWN_PLACEMENTS_CLASS, new String[]{"getPlacementType"}, new Object[]{RAVAGER});
+            if (named != null) {
+               return named;
+            }
+         } catch (ReflectiveOperationException ignored) {
+         }
+         for (Method method : SPAWN_PLACEMENTS_CLASS.getMethods()) {
             if (Modifier.isStatic(method.getModifiers())
                && method.getParameterCount() == 1
                && method.getParameterTypes()[0].isInstance(RAVAGER)
