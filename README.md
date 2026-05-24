@@ -40,7 +40,7 @@ Use `/oldraids reload` after editing the file manually.
 mvn -DskipTests package
 ```
 
-The compiled jar is written to `target/oldraids-1.21.4-1.5.jar`.
+The compiled jar is written to `target/oldraids-1.21.4-1.6.jar`.
 
 ### Special Thanks
 
@@ -90,7 +90,7 @@ use-vanilla-raid-mechanics: false
 mvn -DskipTests package
 ```
 
-编译完成的 jar 包将输出至 `target/oldraids-1.21.4-1.5.jar`。
+编译完成的 jar 包将输出至 `target/oldraids-1.21.4-1.6.jar`。
 
 ### 特别鸣谢
 

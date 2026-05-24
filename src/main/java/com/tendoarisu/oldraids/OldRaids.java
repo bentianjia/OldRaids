@@ -231,6 +231,19 @@ public final class OldRaids extends JavaPlugin implements Listener {
       }
    }
 
+   private void clearPrecalculatedRaidSpawnPositions() {
+      for (World world : this.getServer().getWorlds()) {
+         for (Raid raid : world.getRaids()) {
+            try {
+               NmsBridge.clearWaveSpawnPosition(raid);
+            } catch (ReflectiveOperationException ex) {
+               this.warnNmsBridge(ex);
+               return;
+            }
+         }
+      }
+   }
+
    private void triggerRaidFromBadOmen(Player player) {
       if (this.useVanillaRaidMechanics) {
          return;
@@ -417,8 +430,12 @@ public final class OldRaids extends JavaPlugin implements Listener {
    }
 
    private void reloadSettings() {
+      boolean wasUsingVanillaRaidMechanics = this.useVanillaRaidMechanics;
       this.keepOminousBottle = this.getConfig().getBoolean(KEEP_OMINOUS_BOTTLE_CONFIG, false);
       this.useVanillaRaidMechanics = this.getConfig().getBoolean(USE_VANILLA_RAID_MECHANICS_CONFIG, false);
+      if (this.useVanillaRaidMechanics && !wasUsingVanillaRaidMechanics) {
+         this.clearPrecalculatedRaidSpawnPositions();
+      }
    }
 
    private void sendConfigStatus(CommandSender sender) {
@@ -518,6 +535,14 @@ public final class OldRaids extends JavaPlugin implements Listener {
             throw new ReflectiveOperationException("Raid waveSpawnPos field is unavailable");
          }
          WAVE_SPAWN_POS_FIELD.set(handle, Optional.of(blockPos(location)));
+      }
+
+      private static void clearWaveSpawnPosition(Raid raid) throws ReflectiveOperationException {
+         Object handle = getHandle(raid);
+         if (WAVE_SPAWN_POS_FIELD == null) {
+            throw new ReflectiveOperationException("Raid waveSpawnPos field is unavailable");
+         }
+         WAVE_SPAWN_POS_FIELD.set(handle, Optional.empty());
       }
 
       private static Float nextRaidRandomFloat(Raid raid) throws ReflectiveOperationException {
