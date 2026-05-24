@@ -13,7 +13,7 @@ A lightweight Spigot plugin for 1.21.4 that reverts raid behavior to before 1.21
 - raid waves are moved back toward the pre-1.21.3 spawn-location pattern
 - moved raid wave positions are validated with vanilla Ravager spawn-placement rules
 
-If you want to try or test it, you can to join the server: `trap.786913.xyz`
+If you want to try or test it, you can join the server: `trap.786913.xyz`
 
 ### Build
 
